@@ -1,4 +1,4 @@
-# DineDB
+# Dinedb
 
 Database internals project focused on how real databases work: schema validation, persistence, indexing, and a minimal SQL path (tokenizer → parser → AST → executor). Current stage: **M4.x (SQL parser + executor)**.
 
@@ -67,4 +67,3 @@ Example:
 - **M5:** crash safety basics (atomic metadata/index writes).
 - **M6:** concurrency model (single-writer rule + lock discipline).
 - **M7:** storage evolution toward a page model and free-space tracking.
-
