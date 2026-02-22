@@ -1,0 +1,2 @@
+# dinedb
+Database internals
