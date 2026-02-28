@@ -88,6 +88,22 @@ class StorageEngine:
         """Definition: rebuild PK index for a table."""
         self.backend.rebuild_pk_index(table_name)
 
+    def update_by_pk(self, table_name: str, pk_value: Any, updates: dict[str, Any]) -> dict[str, Any] | None:
+        """Definition: update one row by primary key via backend.
+
+        Example:
+            updated = storage.update_by_pk("users", 1, {"name": "Asha"})
+        """
+        return self.backend.update_by_pk(table_name, pk_value, updates)
+
+    def delete_by_pk(self, table_name: str, pk_value: Any) -> bool:
+        """Definition: delete one row by primary key via backend.
+
+        Example:
+            deleted = storage.delete_by_pk("users", 1)
+        """
+        return self.backend.delete_by_pk(table_name, pk_value)
+
     @property
     def _schemas(self) -> dict[str, TableSchema]:
         """Compatibility accessor for M1 examples/tests."""

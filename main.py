@@ -10,98 +10,65 @@ from dinedb.sql.engine import SqlExecutor
 def main() -> None:
     service = DineDBService.from_env()
     executor = SqlExecutor(service.storage)
-    print("dinedb CLI (M3.7) - type .help for commands")
+    print("dinedb SQL shell")
+    print("Enter SQL statements terminated by ';' (multi-line supported). Ctrl+D to exit.")
+
+    try:
+        import readline  # noqa: F401
+    except Exception:
+        pass
+
+    buffer: list[str] = []
+
+    def prompt() -> str:
+        return "dinedb> " if not buffer else "....> "
+
+    def split_sql_statements(sql_text: str) -> list[str]:
+        """Split SQL text on semicolons, ignoring semicolons inside single quotes."""
+        statements: list[str] = []
+        current: list[str] = []
+        in_string = False
+        i = 0
+        while i < len(sql_text):
+            ch = sql_text[i]
+            if ch == "'":
+                in_string = not in_string
+                current.append(ch)
+                i += 1
+                continue
+            if ch == ";" and not in_string:
+                stmt = "".join(current).strip()
+                if stmt:
+                    statements.append(stmt)
+                current = []
+                i += 1
+                continue
+            current.append(ch)
+            i += 1
+        tail = "".join(current).strip()
+        if tail:
+            statements.append(tail)
+        return statements
 
     while True:
         try:
-            line = input("dinedb> ").strip()
+            line = input(prompt()).rstrip()
         except EOFError:
             print()
             break
 
-        if not line:
+        if not line.strip():
             continue
 
-        if line in {".exit", ".quit"}:
-            break
-
-        if line == ".help":
-
-            print(
-                "\n".join(
-                    [
-                        "Commands:",
-                        "  .demo                     create users + insert sample rows",
-                        "  .validate <table>          validate PK index for table",
-                        "  .reindex <table>           rebuild PK index for table",
-                        "  .pk <table> <id>           direct PK lookup (check meta.index_used)",
-                        "  .sql <statement>           run SQL (CREATE/INSERT/SELECT)",
-                        "  .sql_demo                  run a mini SQL script (good + bad examples)",
-                        "  .exit / .quit              exit",
-                    ]
-                )
-            )
+        buffer.append(line)
+        sql_text = "\n".join(buffer)
+        if ";" not in sql_text:
             continue
 
-        if line == ".demo":
-            result = {
-                "create_table": service.create_table(
-                    "users",
-                    [
-                        Column(name="id", data_type="INT", is_primary_key=True),
-                        Column(name="name", data_type="TEXT"),
-                    ],
-                ),
-                "insert_row_1": service.insert("users", [1, "Asha"]),
-                "insert_row_2": service.insert("users", [2, "Rahul"]),
-            }
-            print(json.dumps(result, indent=2, sort_keys=True))
-            continue
-
-        if line.startswith(".validate "):
-            table = line.split(maxsplit=1)[1]
-            print(json.dumps(service.validate_pk_index(table), indent=2, sort_keys=True))
-            continue
-
-        if line.startswith(".reindex "):
-            table = line.split(maxsplit=1)[1]
-            print(json.dumps(service.rebuild_pk_index(table), indent=2, sort_keys=True))
-            continue
-
-        if line.startswith(".pk"):
-            line_split = line.split(maxsplit=2)
-            if len(line_split) < 3:
-                print("usage: .pk <table> <id>")
-                continue
-            table = line_split[1]
-            value = line_split[2]
-            pk_value = int(value) if value.isdigit() else value
-            print(json.dumps(service.get_by_pk(table, pk_value), indent=2, sort_keys=True))
-            continue
-
-        if line.startswith(".sql "):
-            sql = line.split(" ", 1)[1]
-            print(json.dumps(executor.execute(sql), indent=2, sort_keys=True))
-            continue
-
-        if line == ".sql_demo":
-            demo_sql = [
-                "CREATE TABLE users (id INT PRIMARY KEY, name TEXT);",
-                "INSERT INTO users VALUES (1, 'Asha');",
-                "SELECT * FROM users WHERE id = 1;",
-                "SELECT * FROM users WHERE name = 'Asha';",
-            ]
-            for stmt in demo_sql:
-                print(f"SQL> {stmt}")
-                print(json.dumps(executor.execute(stmt), indent=2, sort_keys=True))
-            continue
-
-        upper = line.upper()
-        if upper.startswith("SELECT ") or upper.startswith("INSERT ") or upper.startswith("CREATE "):
-            print(json.dumps(executor.execute(line), indent=2, sort_keys=True))
-            continue
-
-        print("unknown command, type .help")
+        statements = split_sql_statements(sql_text)
+        buffer.clear()
+        for stmt in statements:
+            print(json.dumps(executor.execute(stmt + ";"), indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

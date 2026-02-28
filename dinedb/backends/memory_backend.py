@@ -82,6 +82,45 @@ class InMemoryBackend:
             raise SchemaError(f"Table '{table_name}' does not exist")
         return list(self.rows[table_name])
 
+    def update_by_pk(self, table_name: str, pk_value: Any, updates: dict[str, Any]) -> dict[str, Any] | None:
+        """Update one row by primary key and return updated row."""
+        schema = self.schemas.get(table_name)
+        if schema is None:
+            raise SchemaError(f"Table '{table_name}' does not exist")
+
+        pk_column = schema.primary_key
+        if pk_column is None:
+            raise SchemaError("Table has no primary key")
+
+        if pk_column.name in updates:
+            raise ConstraintError("Updating primary key is not supported in M4.6")
+
+        rows = self.rows.get(table_name, [])
+        for idx, row in enumerate(rows):
+            if row.get(pk_column.name) == pk_value:
+                updated = {**row, **updates}
+                validated = schema.validate_row(updated)
+                self.rows[table_name][idx] = validated
+                return validated
+        return None
+
+    def delete_by_pk(self, table_name: str, pk_value: Any) -> bool:
+        """Delete one row by primary key and return True if deleted."""
+        schema = self.schemas.get(table_name)
+        if schema is None:
+            raise SchemaError(f"Table '{table_name}' does not exist")
+
+        pk_column = schema.primary_key
+        if pk_column is None:
+            raise SchemaError("Table has no primary key")
+
+        rows = self.rows.get(table_name, [])
+        for idx, row in enumerate(rows):
+            if row.get(pk_column.name) == pk_value:
+                del self.rows[table_name][idx]
+                return True
+        return False
+
     def validate_pk_index(self, table_name: str) -> bool:
         """In-memory backend has no separate index, so it is always consistent."""
         schema = self.schemas.get(table_name)

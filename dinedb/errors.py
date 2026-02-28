@@ -35,3 +35,13 @@ class ConstraintError(StorageError, ValueError):
     """
 
     pass
+
+
+class ConcurrencyError(DatabaseError):
+    """Concurrent access error.
+
+    Example:
+        Raised when one writer is already active and another writer tries to start.
+    """
+
+    pass

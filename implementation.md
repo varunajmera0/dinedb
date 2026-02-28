@@ -2,11 +2,17 @@
 
 ## Summary
 This spec kit teaches database internals step-by-step using a mini Python SQL engine.  
-Every milestone explains:
-1. what we build,
-2. what breaks,
-3. how we fix it in our mini DB,
-4. how production databases solve the same problem.
+Every milestone follows the same architectural framework:
+1) Lame Analogy (hook),  
+2) Technical Bridge (why before how),  
+3) Senior Implementation Roadmap (pro definition + senior insight + bottom line),  
+then tasks, checks, and exercises.
+
+## Tradeoff Rule (Mandatory)
+Every feature must explicitly document:
+- **Primary tradeoff** (what we gain vs what we lose),
+- **Alternative approach** (what a different design would optimize),
+- **Why we chose this** (given learning vs production constraints).
 
 ## Assumptions and Defaults
 - Language: Python (learning-first).
@@ -15,7 +21,7 @@ Every milestone explains:
 - Pedagogy: slow progression, no skipped steps.
 - Domain examples: chosen per topic (e-commerce, food delivery, analytics, fintech, SaaS).
 
-## Starter Deliverables
+## Deliverables
 - `implementation.md`
 - `notes/00-overview.md`
 - `notes/01-schema-and-row-validation.md`
@@ -32,338 +38,357 @@ Every milestone explains:
 - `CreateTable`
 - `Insert`
 - `Select`
+- `Update`
+- `Delete`
 
 ### Storage Contracts
 - `create_table(table_name, columns)`
 - `insert(table_name, values)`
-- `select(table_name, columns, where_column=None, where_value=None, limit=None)`
-- index lookup path and fallback to table scan
+- `select_all(table_name)`
+- `get_by_pk(table_name, pk_value)`
+- `update_by_pk(table_name, pk_value, updates)`
+- `delete_by_pk(table_name, pk_value)`
 
 ### Engine Contract
 - `execute(sql: str) -> dict`
-- response shape:
-  - create: `{"ok": true, "message": "..."}`
-  - insert: `{"ok": true, "row": {...}, "message": "..."}`
-  - select: `{"ok": true, "rows": [...], "count": n, "message": "..."}`
+- create: `{"ok": true, "message": "..."}`
+- insert: `{"ok": true, "row": {...}, "message": "..."}`
+- select: `{"ok": true, "rows": [...], "count": n}`
+- update: `{"ok": true, "updated": 0|1, "row": {...}|null}`
+- delete: `{"ok": true, "deleted": 0|1}`
 
 ### Error Taxonomy
 - parse errors
 - schema/constraint errors
 - storage errors
 
-## Milestone Template
-Use this exact checklist format in each implementation iteration:
-1. Objective
-2. Internal design (data structures, control flow)
-3. Problem encountered (real failure mode)
-4. Our solution in mini DB
-5. Real DB solution in production
-6. Real-world case (company/user scenario)
-7. Implementation tasks (file-by-file)
-8. Acceptance checks
-9. Exercise
+## Major Database Features (Production Map)
+- **Storage engine:** page model, buffer pool, free-space tracking, compression.
+- **Indexing:** secondary/composite indexes, B+Tree/LSM variants.
+- **Query engine:** optimizer, joins, aggregations, sorting, window functions, views/CTEs.
+- **Transactions:** WAL, checkpoints, crash recovery, rollback.
+- **Concurrency:** locks/MVCC, isolation levels, deadlock handling.
+- **Ops:** backups/PITR, replication, monitoring, query plans/explain.
+
+## What Real Databases Have
+When people say "real database," they usually mean an engine that combines several layers at once:
+- **Logical layer:** SQL parser, semantic validation, query planning, relational operators.
+- **Storage layer:** durable files, page layout, buffer manager, free-space management.
+- **Access-path layer:** primary and secondary indexes, ordered/range access, index maintenance.
+- **Transaction layer:** WAL, checkpoints, recovery, rollback, commit protocol.
+- **Concurrency layer:** locks or MVCC, isolation levels, deadlock handling.
+- **Operational layer:** backup/restore, PITR, metrics, explain plans, replication, failover.
+
+The important architectural point is that these are not optional decorations. They are the layers that turn "data in files" into a reliable database system.
+
+## Real Database Core Features We Intend to Implement
+This project will not stop at the toy-DB layer. The planned implementation set includes the core features that make a database trustworthy and useful:
+- **Schema and constraints:** typed rows, PK enforcement, validation at write time.
+- **Durable storage:** persistent metadata and row files.
+- **Primary-key indexing:** direct lookup path instead of full scans.
+- **SQL path:** tokenizer, parser, AST, executor.
+- **Crash safety:** WAL, replay on startup, checkpoints/applied-state tracking.
+- **Rollback foundation:** undo/redo-aware recovery model.
+- **Concurrency control:** single-writer first, then stronger locking/isolation.
+- **Relational execution:** joins as an advanced SQL milestone.
+- **Storage-engine evolution:** page model, free-space tracking, buffer-manager concepts.
+
+This means we are not only studying these features. We intend to build a meaningful subset of them directly in `dinedb`.
+
+## Real Database Features We Will Likely Describe But Not Fully Implement
+Some production features are important to understand, but are currently outside the realistic scope of this learning-first engine:
+- full cost-based optimizer
+- replication and failover
+- PITR and backup tooling
+- full MVCC implementation
+- distributed consensus
+- deep security model (roles, authz, encryption)
+
+## What Production Databases Do Later
+After the learning-first milestones, production engines like PostgreSQL, InnoDB, SQL Server, and Oracle go much further in the same areas:
+- **Concurrency expansion:** row/page/table locks, lock manager, deadlock detection, deadlock resolution.
+- **MVCC and visibility:** snapshot reads, transaction IDs, undo segments or vacuum-driven cleanup.
+- **Isolation-level contracts:** Read Committed, Repeatable Read, Serializable, predicate locking in stricter engines.
+- **Recovery depth:** binary WAL/redo records, checksums, torn-page detection, full checkpoints, group commit.
+- **Query planning:** cost-based optimizer, join reordering, statistics, cardinality estimation, plan caching.
+- **Storage-engine depth:** slotted pages, buffer pool eviction, background flush, compaction or vacuum.
+- **Operational controls:** backup/restore, PITR, replication, failover, metrics, explain plans.
+
+The senior architectural point is that these are not separate topics. They are the production-grade continuations of the same milestone chain:
+- `M5` grows into deeper recovery and commit protocol
+- `M6` grows into serious concurrency control and isolation levels
+- later SQL milestones grow into joins, optimizer rules, and statistics-driven planning
+
+Real database examples:
+- **PostgreSQL**: MVCC, WAL, checkpoints, vacuum, cost-based optimizer, replication.
+- **InnoDB**: redo + undo, row locks, MVCC, purge/cleanup, buffer pool, crash recovery.
+
+Real-world examples:
+- **Banking** needs stronger isolation and recovery semantics.
+- **E-commerce** needs optimizer and indexing depth as query shapes grow.
+- **Ride-hailing / food delivery** needs high write concurrency with correct state transitions.
+
+## Core Features → Milestones Mapping
+- **JOINs** → **M4.9** (advanced SQL path, join execution).
+- **Locks / Isolation** → **M6** (concurrency control).
+- **ACID**
+  - **A + D** → **M5** (WAL + recovery)
+  - **I** → **M6** (locks/MVCC)
+  - **C** → **M1 + M5/M6** (constraints + transactional guarantees)
+- **Rollback** → **M5** (undo via WAL)
+- **Recovery** → **M5** (WAL replay + checkpoints)
 
 ---
 
 ## M0: Clean Baseline
-### 1. Objective
-Remove ambiguity and establish a consistent scaffold.
+### Lame Analogy (Hook)
+Clearing a messy desk before you start a project so you don’t confuse old notes with new work.
 
-### 2. Internal Design
-Create stable project paths and runtime directories:
-- `dinedb/` for engine code
-- `tests/` for validation
-- `data/` for runtime files
-- `notes/` for learning modules
+### Technical Bridge (Why)
+Mixed assumptions cause hidden bugs. At scale, ambiguity is the root of inconsistent behavior.
 
-### 3. Problem Encountered
-Partially implemented systems create mixed assumptions and hidden bugs.
+### Senior Implementation Roadmap
+**Pro Definition:** Establish a stable scaffold and source of truth.  
+**Senior Insight:** If the scaffolding changes mid-stream, every later milestone inherits risk.  
+**Bottom Line:** A clean baseline prevents systemic drift.
 
-### 4. Our Solution in Mini DB
-Reset to a known baseline and rebuild in explicit milestones.
+### Implementation Tasks (file-by-file)
+- Ensure `dinedb/`, `tests/`, `data/`, `notes/` exist.
+- Keep runtime artifacts out of design docs.
 
-### 5. Real DB Solution in Production
-Teams run controlled migrations, staged rollouts, and compatibility gates.
-
-### 6. Real-World Case
-An internal data platform inherits old scripts and new services; inconsistent schema assumptions cause ingestion failures.
-
-### 7. Implementation Tasks
-- Confirm scaffold folders exist.
-- Keep runtime artifacts (`data/*`) out of design docs.
-- Keep milestone checklists versioned with docs.
-
-### 8. Acceptance Checks
+### Acceptance Checks
 - Project structure matches agreed starter paths.
 - Learning docs exist before new feature expansion.
 
-### 9. Exercise
+### Exercise
 List all files that are source-of-truth for architecture decisions.  
 Expected outcome: only `implementation.md` and `notes/*.md`.
 
 ---
 
 ## M1: Schema + Row Validation
-### 1. Objective
-Define table metadata and prevent invalid rows from entering storage.
+### Lame Analogy (Hook)
+A restaurant menu with strict order rules so the kitchen doesn’t receive nonsense.
 
-### 2. Internal Design
-- `Column(name, data_type, is_primary_key)`
-- `TableSchema(name, columns)`
-- validation step in insert path before persistence
+### Technical Bridge (Why)
+Garbage in leads to garbage out. Data integrity must be enforced at the boundary.
 
-### 3. Problem Encountered
-Malformed rows poison reads and downstream logic.
+### Senior Implementation Roadmap
+**Pro Definition:** Type enforcement and constraint validation at write time.  
+**Senior Insight:** Strict schemas reduce flexibility but prevent corruption early.  
+**Bottom Line:** Bad data poisons everything else.
 
-### 4. Our Solution in Mini DB
-Strict type and column validation at write time.
+### Implementation Tasks
+- `dinedb/models.py`: `Column`, `TableSchema`, `validate_row`.
+- `dinedb/storage.py`: enforce validation before persistence.
 
-### 5. Real DB Solution in Production
-Catalog-managed schemas and typed record encoding.
-
-### 6. Real-World Case
-E-commerce supplier feed sends `"price": "N/A"` into numeric field; analytics and search ranking fail.
-
-### 7. Implementation Tasks
-- `dinedb/models.py`: column/schema types and `validate_row`.
-- `dinedb/storage.py`: call validation before append.
-- `tests/test_storage.py`: invalid type and missing column cases.
-
-### 8. Acceptance Checks
+### Acceptance Checks
 - Invalid insert rejects with deterministic error.
 - Valid insert persists and remains queryable.
 
-### 9. Exercise
-Try inserting a row with an unknown column.  
+### Exercise
+Insert a row with an unknown column.  
 Expected outcome: write is rejected before touching table file.
 
 ---
 
 ## M2: Durable Persistence
-### 1. Objective
-Persist schema and rows across process restarts.
+### Lame Analogy (Hook)
+Writing receipts in a ledger so the records survive after you leave the counter.
 
-### 2. Internal Design
-- `data/schema.json` for table metadata
-- `data/<table>.tbl` as append-only JSONL rows
-- startup loads schema into memory
+### Technical Bridge (Why)
+Memory is volatile. Without disk persistence, restarts destroy state.
 
-### 3. Problem Encountered
-In-memory-only state disappears on restart.
+### Senior Implementation Roadmap
+**Pro Definition:** Stable on-disk state for schema and data.  
+**Senior Insight:** Sequential I/O beats random I/O for throughput.  
+**Bottom Line:** Without persistence, you don’t have a database.
 
-### 4. Our Solution in Mini DB
-Disk-backed schema and append protocol for row files.
+### Implementation Tasks
+- `dinedb/backends/json_file_backend.py`: schema + append-only rows.
+- `dinedb/storage.py`: backend abstraction.
 
-### 5. Real DB Solution in Production
-Persistent heap/page files and metadata catalogs.
-
-### 6. Real-World Case
-Food delivery ops updates menu; service restarts and menu silently reverts.
-
-### 7. Implementation Tasks
-- `dinedb/storage.py`: load/save schema and append rows.
-- `tests/test_smoke.py`: restart engine and verify row survival.
-
-### 8. Acceptance Checks
+### Acceptance Checks
 - Same query result before and after restart.
 - Table definitions remain intact after restart.
 
-### 9. Exercise
+### Exercise
 Insert rows, restart process, run select again.  
 Expected outcome: identical dataset returned.
 
 ---
 
 ## M3: Primary Key Indexing
-### 1. Objective
-Avoid full scans for primary key lookups.
+### Lame Analogy (Hook)
+A phonebook vs flipping every page for one name.
 
-### 2. Internal Design
-- sidecar index file: `data/<table>.pk.json`
-- map `pk_value -> row byte offset`
-- select path: use index for `WHERE pk = value`, else scan
+### Technical Bridge (Why)
+Full scans scale linearly. That’s fatal for latency.
 
-### 3. Problem Encountered
-Point lookups degrade linearly with table size.
+### Senior Implementation Roadmap
+**Pro Definition:** PK index mapping `key -> row location`.  
+**Senior Insight:** Indexes accelerate reads but increase write cost.  
+**Bottom Line:** Predictable read latency is mandatory.
 
-### 4. Our Solution in Mini DB
-Maintain PK index during insert and use direct seek on lookup.
+### Implementation Tasks
+- `dinedb/backends/json_file_backend.py`: PK index file.
+- `dinedb/storage.py`: indexed lookup path.
 
-### 5. Real DB Solution in Production
-B+Tree or LSM index structures with buffer caching.
-
-### 6. Real-World Case
-Rider/order support lookup in peak traffic times out because every request scans large files.
-
-### 7. Implementation Tasks
-- `dinedb/storage.py`: create/read/write PK index file.
-- `dinedb/storage.py`: implement indexed lookup path.
-- `tests/test_storage.py`: verify index hit correctness.
-
-### 8. Acceptance Checks
+### Acceptance Checks
 - Duplicate PK insert is rejected.
-- `WHERE pk = ...` returns correct row without full scan fallback.
+- `WHERE pk = ...` returns correct row without full scan.
 
-### 9. Exercise
-Manually inspect index file after inserts.  
+### Exercise
+Inspect index file after inserts.  
 Expected outcome: each PK maps to a stable row location.
 
 ---
 
-## M4: SQL Path (Parser -> AST -> Executor)
-### 1. Objective
-Translate SQL text into deterministic execution behavior.
+## M4: SQL Path (Parser → AST → Executor)
+### Lame Analogy (Hook)
+A waiter translating spoken orders into clear tickets the kitchen understands.
 
-### 2. Internal Design
-- parser builds AST nodes (`CreateTable`, `Insert`, `Select`)
-- engine dispatches AST to storage actions
-- stable output payload contract
+### Technical Bridge (Why)
+Text is ambiguous. A deterministic AST prevents misinterpretation.
 
-### 3. Problem Encountered
-Loose parsing causes ambiguous behavior and hard-to-debug failures.
+### Senior Implementation Roadmap
+**Pro Definition:** Tokenize → parse → AST → execution dispatch.  
+**Senior Insight:** Parser ambiguity destroys trust in results.  
+**Bottom Line:** The SQL path is the human-to-engine contract.
 
-### 4. Our Solution in Mini DB
-Constrained grammar and explicit parse errors.
+### Implementation Tasks
+**M4.1 Tokenizer**
+- `dinedb/sql/sql_parser.py`: `TokenType`, `Token`, `tokenize`.
 
-### 5. Real DB Solution in Production
-Parser, optimizer, and execution plan tree.
+**M4.2 Parser → AST**
+- `dinedb/sql/sql_parser.py`: `CreateTable`, `Insert`, `Select`, `Update`, `Delete`.
 
-### 6. Real-World Case
-Analytics team runs slightly malformed SQL; inconsistent parser behavior creates trust issues in dashboards.
+**M4.3 Executor**
+- `dinedb/sql/engine.py`: map AST to storage methods.
+- `dinedb/storage.py`: `select_all`, `update_by_pk`, `delete_by_pk`.
 
-### 7. Implementation Tasks
-- `dinedb/sql.py`: parse supported SQL subset.
-- `dinedb/engine.py`: map AST to storage methods.
-- `main.py`: CLI loop and structured result output.
-- `tests/test_parser.py`: valid/invalid statement coverage.
+**M4.4 CLI Integration**
+- `main.py`: SQL shell execution path.
 
-### 8. Acceptance Checks
+**M4.5 Hardening**
+- deterministic parse errors
+- WHERE type validation
+- semicolon-in-string handling
+
+### Acceptance Checks
 - Supported SQL forms parse and execute.
-- Unsupported SQL returns deterministic parse errors.
+- Unsupported SQL returns deterministic errors.
 
-### 9. Exercise
+### Exercise
 Run one valid and one invalid query.  
 Expected outcome: valid query returns rows; invalid query returns precise parse error.
 
 ---
 
 ## M5: Crash Safety Basics
-### 1. Objective
-Prevent corrupt metadata/index files from partial writes.
+### Lame Analogy (Hook)
+Writing orders in a log before cooking them so you can recover after a mistake.
 
-### 2. Internal Design
-- write temp file first
-- `fsync` temp file where practical
-- atomic rename to target path
+### Technical Bridge (Why)
+Writes are not atomic. Crashes can corrupt files mid-write.
 
-### 3. Problem Encountered
-Crash during write leaves truncated JSON index or schema file.
+### Senior Implementation Roadmap
+**Pro Definition:** WAL and atomic metadata writes.  
+**Senior Insight:** WAL adds write amplification but makes recovery deterministic.  
+**Bottom Line:** Crash recovery is non-negotiable.
 
-### 4. Our Solution in Mini DB
-Atomic replace discipline for metadata and index writes.
+### Tradeoffs & Alternatives
+- **Tradeoff:** JSONL WAL is easy to inspect but slower and larger than binary WAL.
+- **Alternative:** start directly with binary WAL for better space efficiency and faster parsing.
+- **Why we chose this:** M5.1/M5.2 use JSONL WAL so intent and failure paths stay visible while recovery semantics are still being learned. Binary WAL is a later production-oriented step after replay/checkpoint behavior is stable.
 
-### 5. Real DB Solution in Production
-WAL, checkpoints, and recovery replay.
+### Implementation Tasks
+- `M5.1`: define JSONL WAL record format in the file backend.
+- `M5.2`: enforce log-before-data ordering for `INSERT`, `UPDATE`, `DELETE`.
+- `M5.3`: replay WAL on startup by applying full WAL idempotently and rewriting touched tables/indexes.
+- `M5.4`: checkpoint / applied-LSN tracking.
+- `M5.5`: consider binary WAL once semantics are stable and JSONL inspection is no longer the priority.
+- atomic metadata/index writes (temp + rename).
 
-### 6. Real-World Case
-Checkout service crashes mid-write; orders acknowledged but metadata partially persisted.
+### M5.3 Tradeoff
+- **Tradeoff:** full startup replay is simple and correct for a learning engine, but startup cost grows with log size.
+- **Alternative:** applied-LSN tracking plus checkpoints to bound replay cost.
+- **Why we chose this:** replay semantics must be correct before replay cost is optimized.
 
-### 7. Implementation Tasks
-- `dinedb/storage.py`: atomic write helper for JSON files.
-- `tests/test_storage.py`: simulate interrupted metadata write path.
+### M5.4 Tradeoff
+- **Tradeoff:** applied-sequence tracking reduces replay work but adds more metadata that itself must stay consistent.
+- **Alternative:** replay the full WAL on every startup and accept slower boots.
+- **Why we chose this:** once replay semantics are correct, bounding startup time is the next reliability concern.
+- **Real database example:** PostgreSQL uses WAL positions and checkpoints to narrow recovery; InnoDB uses redo-log progress and checkpoint metadata for the same reason.
+- **Real-world example:** payment or ordering systems need recovery that is not only correct, but also fast enough to bring service back online under incident pressure.
 
-### 8. Acceptance Checks
-- No partially written JSON files after simulated interruption.
+### M5.5 Tradeoff
+- **Tradeoff:** crash simulation tests are awkward and slower than happy-path tests, but they are the only honest way to validate recovery behavior.
+- **Alternative:** trust code inspection and standard tests only.
+- **Why we chose this:** recovery code must be proven against broken state, not just reasoned about.
+- **Real database example:** serious engines like PostgreSQL and InnoDB are validated heavily around crash boundaries because recovery bugs destroy trust.
+- **Real-world example:** payments, banking, ride-hailing, and ordering systems depend on post-crash correctness, not just normal-path correctness.
+
+### Acceptance Checks
+- No partial JSON files after simulated interruption.
 - Restart still loads prior consistent state.
 
-### 9. Exercise
-Force a failure before rename in test harness.  
-Expected outcome: original file remains valid and readable.
+### Exercise
+Simulate crash before rename; verify recovery path.
 
 ---
 
-## M6: Concurrency Model
-### 1. Objective
-Define safe behavior when multiple operations run concurrently.
+## M6: Concurrency + Isolation
+### Lame Analogy (Hook)
+Two cooks grabbing the same plate unless rules exist.
 
-### 2. Internal Design
-- single-writer guard
-- readers allowed with deterministic visibility model
-- explicit lock acquisition/release boundaries
+### Technical Bridge (Why)
+Concurrent writes cause lost updates and inconsistent reads.
 
-### 3. Problem Encountered
-Concurrent writes can cause lost updates and corrupted indexes.
+### Senior Implementation Roadmap
+**Pro Definition:** locking or MVCC to isolate transactions.  
+**Senior Insight:** locks are simpler but reduce throughput; MVCC costs space.  
+**Bottom Line:** Without isolation, correctness collapses under load.
 
-### 4. Our Solution in Mini DB
-Serialize writes and document read consistency guarantees.
+### Implementation Tasks
+- **M6.1:** transaction boundaries: `BEGIN`, `COMMIT`, `ROLLBACK`, executor transaction state
+- **M6.2:** single-writer rule
+- **M6.3:** committed-read rule
+- **M6.4:** transaction-local write buffer
+- **M6.5:** rollback semantics
+- **M6.6:** isolation and overlap tests
 
-### 5. Real DB Solution in Production
-Lock managers and MVCC snapshot isolation.
+### Acceptance Checks
+- Concurrent operations do not corrupt data.
+- Isolation level is documented and enforced.
+- One executor holding `BEGIN` blocks another writer from `BEGIN`/write statements.
+- One executor holding `BEGIN` blocks other executors' `SELECT` until commit or rollback.
 
-### 6. Real-World Case
-Banking app posts two simultaneous balance updates; one update is silently overwritten.
-
-### 7. Implementation Tasks
-- `dinedb/storage.py`: add writer lock strategy.
-- `tests/test_storage.py`: concurrent write contention tests.
-
-### 8. Acceptance Checks
-- No lost updates in simulated concurrent writes.
-- Rejected writes return clear contention errors or retry signals.
-
-### 9. Exercise
-Run two writer threads updating same key.  
-Expected outcome: deterministic serialization, no corrupted state.
+### Exercise
+Demonstrate lost update without locks, then fix.
 
 ---
 
-## M7: Storage Evolution (JSONL -> Page Model)
-### 1. Objective
-Design migration path from simple file format to scalable page-based storage.
+## M7: Page Model + Scaling
+### Lame Analogy (Hook)
+Filing cabinets with labeled folders instead of loose papers.
 
-### 2. Internal Design
-- define page abstraction (header, slots, payload)
-- free-space tracking strategy
-- compatibility boundary for old row format
+### Technical Bridge (Why)
+Disks are block-addressed; byte-level writes are an illusion.
 
-### 3. Problem Encountered
-JSONL offsets and full-file scans fail at scale.
+### Senior Implementation Roadmap
+**Pro Definition:** page layout, buffer pool, free-space tracking.  
+**Senior Insight:** buffer pool policy dominates performance.  
+**Bottom Line:** This is where I/O performance is won or lost.
 
-### 4. Our Solution in Mini DB
-Plan page-based I/O and controlled migration stages.
+### Implementation Tasks
+- page file format
+- buffer pool + eviction
+- free-space management
 
-### 5. Real DB Solution in Production
-Buffer manager, slotted pages, vacuum/compaction, background maintenance.
+### Acceptance Checks
+- Reads/writes go through page layer.
+- Hot pages remain cached under load.
 
-### 6. Real-World Case
-SaaS logging workload with hot keys produces poor locality and high read amplification.
-
-### 7. Implementation Tasks
-- `notes/07-page-model-and-scaling.md`: page structure and migration design.
-- `implementation.md`: acceptance gates for format transition.
-
-### 8. Acceptance Checks
-- Page format spec is testable and backward compatibility path is explicit.
-- Migration plan includes rollback strategy.
-
-### 9. Exercise
-Sketch one page layout with two variable-length rows and slot directory.  
-Expected outcome: offsets and free space boundaries are unambiguous.
-
----
-
-## Test Matrix (Cross-Milestone)
-1. Schema creation success/failure
-2. Type validation failures
-3. PK uniqueness enforcement
-4. Persistence across restart
-5. Indexed lookup vs scan correctness
-6. Deterministic parser errors
-7. Crash-safety simulation for metadata/index rewrite
-8. Single-writer concurrency behavior
-
-## Sequencing / Handoff
-1. Keep `implementation.md` as the execution checklist.
-2. Study and complete `notes/00` through `notes/04`.
-3. Continue with `notes/05` through `notes/08`.
-4. For each implementation step, use milestone acceptance checks before moving ahead.
+### Exercise
+Measure latency before and after caching a hot page.

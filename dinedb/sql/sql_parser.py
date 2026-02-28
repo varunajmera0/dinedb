@@ -67,6 +67,56 @@ class Select:
     where_value: Any | None = None
     limit: int | None = None
 
+@dataclass(frozen=True)
+class Update:
+    """Definition: AST node for UPDATE.
+
+    Example:
+        Update(table_name="users", assignments={"name": "Asha"}, where_column="id", where_value=1)
+    """
+    table_name: str
+    assignments: dict[str, Any]
+    where_column: str
+    where_value: Any
+
+@dataclass(frozen=True)
+class Delete:
+    """Definition: AST node for DELETE.
+
+    Example:
+        Delete(table_name="users", where_column="id", where_value=1)
+    """
+    table_name: str
+    where_column: str
+    where_value: Any
+
+
+@dataclass(frozen=True)
+class Begin:
+    """Definition: AST node for BEGIN transaction.
+
+    Example:
+        Begin()
+    """
+
+
+@dataclass(frozen=True)
+class Commit:
+    """Definition: AST node for COMMIT transaction.
+
+    Example:
+        Commit()
+    """
+
+
+@dataclass(frozen=True)
+class Rollback:
+    """Definition: AST node for ROLLBACK transaction.
+
+    Example:
+        Rollback()
+    """
+
 def tokenize(sql: str) -> list[Token]:
     """Definition: convert SQL string to a list of tokens.
 
@@ -89,6 +139,12 @@ def tokenize(sql: str) -> list[Token]:
         "LIMIT",
         "PRIMARY",
         "KEY",
+        "UPDATE",
+        "SET",
+        "DELETE",
+        "BEGIN",
+        "COMMIT",
+        "ROLLBACK",
     }
 
     while i < length:
@@ -160,7 +216,7 @@ def tokenize(sql: str) -> list[Token]:
     return tokens
 
 
-def parse(sql: str) -> CreateTable | Insert | Select:
+def parse(sql: str) -> CreateTable | Insert | Select | Update | Delete | Begin | Commit | Rollback:
     """Definition: parse SQL into an AST node.
 
     Example:
@@ -176,7 +232,19 @@ def parse(sql: str) -> CreateTable | Insert | Select:
         return _parse_insert(tokens)
     if _is_keyword(tokens, 0, "SELECT"):
         return _parse_select(tokens)
-    raise ValueError("Supported statements: CREATE TABLE, INSERT, SELECT")
+    if _is_keyword(tokens, 0, "UPDATE"):
+        return _parse_update(tokens)
+    if _is_keyword(tokens, 0, "DELETE"):
+        return _parse_delete(tokens)
+    if _is_keyword(tokens, 0, "BEGIN"):
+        return _parse_begin(tokens)
+    if _is_keyword(tokens, 0, "COMMIT"):
+        return _parse_commit(tokens)
+    if _is_keyword(tokens, 0, "ROLLBACK"):
+        return _parse_rollback(tokens)
+    raise ValueError(
+        "Supported statements: CREATE TABLE, INSERT, SELECT, UPDATE, DELETE, BEGIN, COMMIT, ROLLBACK"
+    )
 
 
 def _parse_create_table(tokens: list[Token]) -> CreateTable:
@@ -377,6 +445,193 @@ def _parse_select(tokens: list[Token]) -> Select:
         limit=limit,
     )
 
+def _parse_update(tokens: list[Token]) -> Update:
+    """Definition: parse UPDATE TABLE tokens into Update AST.
+
+    Dry run example:
+        Input SQL:
+            UPDATE users SET name = 'Asha', age = 21 WHERE id = 1;
+        Token stream (simplified):
+            [UPDATE, IDENT(users), SET,
+             IDENT(name), EQUAL, STRING(Asha), COMMA,
+             IDENT(age), EQUAL, NUMBER(21),
+             WHERE, IDENT(id), EQUAL, NUMBER(1), SEMICOLON]
+
+        Parse steps:
+        1) Read UPDATE
+        2) Read table name: users
+        3) Read SET assignments:
+           - name = 'Asha'
+           - age = 21
+        4) Read WHERE: id = 1
+        5) Build Update AST
+
+        Result:
+            Update(
+                table_name="users",
+                assignments={"name": "Asha", "age": 21},
+                where_column="id",
+                where_value=1,
+            )
+    """
+    i = 0
+    _expect_keyword(tokens, i, "UPDATE")
+    i += 1
+    table_name = _expect_ident(tokens, i).value
+    i += 1
+    _expect_keyword(tokens, i, "SET")
+    i += 1
+
+    assignments: dict[str, Any] = {}
+    while True:
+        col_name = _expect_ident(tokens, i).value
+        i += 1
+        _expect(tokens, i, TokenType.EQUAL)
+        i += 1
+        token = tokens[i]
+        if token.type == TokenType.NUMBER:
+            value: Any = int(token.value)
+        elif token.type == TokenType.STRING:
+            value = token.value
+        elif token.type == TokenType.IDENT:
+            value = token.value
+        else:
+            raise ValueError(f"Unexpected token {token.type} at {token.pos}")
+        assignments[col_name] = value
+        i += 1
+
+        if _match(tokens, i, TokenType.COMMA):
+            i += 1
+            continue
+        break
+
+    _expect_keyword(tokens, i, "WHERE")
+    i += 1
+    where_column = _expect_ident(tokens, i).value
+    i += 1
+    _expect(tokens, i, TokenType.EQUAL)
+    i += 1
+    token = tokens[i]
+    if token.type == TokenType.NUMBER:
+        where_value: Any = int(token.value)
+    elif token.type == TokenType.STRING:
+        where_value = token.value
+    elif token.type == TokenType.IDENT:
+        where_value = token.value
+    else:
+        raise ValueError(f"Unexpected token {token.type} at {token.pos}")
+    i += 1
+
+    _consume_optional_semicolon(tokens, i)
+    return Update(
+        table_name=table_name,
+        assignments=assignments,
+        where_column=where_column,
+        where_value=where_value,
+    )
+
+
+def _parse_delete(tokens: list[Token]) -> Delete:
+    """Definition: parse DELETE tokens into Delete AST.
+
+    Dry run example:
+        Input SQL:
+            DELETE FROM users WHERE id = 1;
+
+        Token stream (simplified):
+            [DELETE, FROM, IDENT(users), WHERE, IDENT(id), EQUAL, NUMBER(1), SEMICOLON]
+
+        Parse steps:
+        1) Read DELETE FROM
+        2) Read table name: users
+        3) Read WHERE: id = 1
+        4) Build Delete AST
+
+        Result:
+            Delete(
+                table_name="users",
+                where_column="id",
+                where_value=1,
+            )
+    """
+    i = 0
+    _expect_keyword(tokens, i, "DELETE")
+    i += 1
+    _expect_keyword(tokens, i, "FROM")
+    i += 1
+    table_name = _expect_ident(tokens, i).value
+    i += 1
+
+    _expect_keyword(tokens, i, "WHERE")
+    i += 1
+    where_column = _expect_ident(tokens, i).value
+    i += 1
+    _expect(tokens, i, TokenType.EQUAL)
+    i += 1
+    token = tokens[i]
+    if token.type == TokenType.NUMBER:
+        where_value: Any = int(token.value)
+    elif token.type == TokenType.STRING:
+        where_value = token.value
+    elif token.type == TokenType.IDENT:
+        where_value = token.value
+    else:
+        raise ValueError(f"Unexpected token {token.type} at {token.pos}")
+    i += 1
+
+    _consume_optional_semicolon(tokens, i)
+    return Delete(
+        table_name=table_name,
+        where_column=where_column,
+        where_value=where_value,
+    )
+
+
+def _parse_begin(tokens: list[Token]) -> Begin:
+    """Definition: parse BEGIN tokens into Begin AST.
+
+    Dry run example:
+        Input SQL:
+            BEGIN;
+
+        Token stream:
+            [KEYWORD(BEGIN), SEMICOLON]
+
+        Parse steps:
+        1) Read BEGIN
+        2) Consume optional semicolon
+        3) Build Begin AST
+
+        Result:
+            Begin()
+    """
+    _expect_keyword(tokens, 0, "BEGIN")
+    _consume_optional_semicolon(tokens, 1)
+    return Begin()
+
+
+def _parse_commit(tokens: list[Token]) -> Commit:
+    """Definition: parse COMMIT tokens into Commit AST.
+
+    Example:
+        COMMIT;
+        -> Commit()
+    """
+    _expect_keyword(tokens, 0, "COMMIT")
+    _consume_optional_semicolon(tokens, 1)
+    return Commit()
+
+
+def _parse_rollback(tokens: list[Token]) -> Rollback:
+    """Definition: parse ROLLBACK tokens into Rollback AST.
+
+    Example:
+        ROLLBACK;
+        -> Rollback()
+    """
+    _expect_keyword(tokens, 0, "ROLLBACK")
+    _consume_optional_semicolon(tokens, 1)
+    return Rollback()
 
 def _consume_optional_semicolon(tokens: list[Token], i: int) -> None:
     """Definition: consume trailing semicolon if present and assert end.
@@ -451,3 +706,6 @@ def _match(tokens: list[Token], i: int, token_type: TokenType) -> bool:
         Check if tokens[i] == COMMA before continuing column list.
     """
     return i < len(tokens) and tokens[i].type == token_type
+
+
+print(parse("UPDATE varun SET col = val, col1=val WHERE col = value"))

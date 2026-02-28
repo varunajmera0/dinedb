@@ -37,3 +37,9 @@ class StorageBackend(Protocol):
 
     def rebuild_pk_index(self, table_name: str) -> None:
         """Rebuild the PK index for a table."""
+
+    def update_by_pk(self, table_name: str, pk_value: Any, updates: dict[str, Any]) -> dict[str, Any] | None:
+        """Update one row by primary key and return updated row."""
+
+    def delete_by_pk(self, table_name: str, pk_value: Any) -> bool:
+        """Delete one row by primary key and return True if deleted."""

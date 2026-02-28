@@ -92,6 +92,15 @@ class TableSchema:
                 return column
         return None
 
+    @property
+    def column_map(self) -> dict[str, Column]:
+        """Definition: quick lookup of columns by name.
+
+        Example:
+            schema.column_map["id"].data_type == "INT"
+        """
+        return {column.name: column for column in self.columns}
+
     def validate_row(self, row: dict[str, Any]) -> dict[str, Any]:
         """Definition: validate one row against schema and normalize output.
 
